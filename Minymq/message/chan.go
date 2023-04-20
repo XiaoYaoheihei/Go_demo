@@ -38,6 +38,26 @@ type Chan struct {
 	repreatMsgChan chan utils.ChanReq
 }
 
+// 新建一个Chan
+func NewChan(name string, inMemSize int) *Chan {
+	tmp := &Chan{
+		name:            name,
+		addChan:         make(chan utils.ChanReq),
+		remChan:         make(chan utils.ChanReq),
+		consumers:       make([]Consumer, 0, 5),
+		bufChan:         make(chan *message, 5),
+		proMsgChan:      make(chan *message, inMemSize),
+		conMsgChan:      make(chan *message),
+		exitChan:        make(chan utils.ChanReq),
+		inFlightMsgChan: make(chan *message),
+		inFlightMsg:     make(map[string]*message),
+		repreatMsgChan:  make(chan utils.ChanReq),
+		finMsgChan:      make(chan utils.ChanReq),
+	}
+	go tmp.EventLoop()
+	return tmp
+}
+
 // 添加消费者
 func (c *Chan) Add(conInfo Consumer) {
 	log.Printf("Channel(%s)is adding consumer...", c.name)
@@ -201,7 +221,7 @@ func (c *Chan) ReAckQueue(closeChan chan struct{}) {
 			uuidStr := repeatMsg.Variable.(string)
 			msg, err := c.popInFlightMsg(uuidStr)
 			if err != nil {
-				log.Printf("error : failed to repeat consumer message (%s)", uuidStr, error.Error())
+				log.Printf("error : %s failed to repeat consumer message (%s)", uuidStr, error.Error())
 			} else {
 				//重新放入生产者消息队列
 				go func(msg *message) {
