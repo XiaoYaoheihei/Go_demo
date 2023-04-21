@@ -5,9 +5,11 @@ import (
 	"Minymq/utils"
 	"bufio"
 	"log"
+	"reflect"
 	"strings"
 )
 
+// 协议关联了Channel,实现了“拉”模式
 type Protocol struct {
 	channel *message.Chan
 }
@@ -55,7 +57,34 @@ func (p *Protocol) IoLoop(client StatefulReadWriter) error {
 
 // 执行参数，以传入的 params 的第一项作为方法名，判断有无实现该函数并执行反射调用。
 func (p *Protocol) Execute(client StatefulReadWriter, params []string) ([]byte, error) {
-
+	var (
+		err  error
+		resp []byte
+	)
+	//获取Type类型
+	typ := reflect.TypeOf(p)
+	//声明一个Value类型的切片
+	args := make([]reflect.Value, 3)
+	args[0] = reflect.ValueOf(p)
+	args[1] = reflect.ValueOf(client)
+	//返回将所有字母都转为对应的大写版本的拷贝
+	cmd := strings.ToUpper(params[0])
+	//通过Type类型来判断是否存在某个方法
+	if method, ok := typ.MethodByName(cmd); ok {
+		args[2] = reflect.ValueOf(params)
+		//存在方法就进行调用，传入参数是一个切片[]Value，返回值也是个切片[]Value
+		//将 client 和 params 数组一起作为参数进行传递
+		returnValues := method.Func.Call(args)
+		//它返回函数所有输出结果的Value封装的切片
+		if !returnValues[0].IsNil() {
+			resp = returnValues[0].Interface().([]byte)
+		}
+		if !returnValues[1].IsNil() {
+			err = returnValues[1].Interface().(error)
+		}
+		return resp, err
+	}
+	return nil, ClientErrInvalid
 }
 
 // 执行SUB订阅
@@ -78,6 +107,7 @@ func (p *Protocol) SUB(client StatefulReadWriter, params []string) ([]byte, erro
 	client.SetState(ClientWaitGet)
 	//获取topic和channel
 	topic := message.GetTopic(topicName)
+	//绑定协议与channel之间的关联
 	p.channel = topic.GetChannel(channelName)
 	return nil, nil
 }
@@ -95,7 +125,7 @@ func (p *Protocol) GET(client StatefulReadWriter, params []string) ([]byte, erro
 	}
 	//得到uuid
 	uuidStr := utils.UuidTostring(msg.Uuid())
-	log.Printf("protocol: writing msg (%s) to client - %s", uuidStr, client.String(), string(msg.Context()))
+	log.Printf("protocol: writing msg (%s) to client(%s) - %s", uuidStr, client.String(), string(msg.Context()))
 	//更改状态
 	client.SetState(ClientWaitResponse)
 	return msg.Data(), nil
