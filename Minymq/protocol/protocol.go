@@ -4,6 +4,7 @@ import (
 	"Minymq/message"
 	"Minymq/utils"
 	"bufio"
+	"bytes"
 	"log"
 	"reflect"
 	"strings"
@@ -56,7 +57,7 @@ func (p *Protocol) IoLoop(client StatefulReadWriter) error {
 }
 
 // 执行参数，以传入的 params 的第一项作为方法名，判断有无实现该函数并执行反射调用。
-func (p *Protocol) Execute(client StatefulReadWriter, params []string) ([]byte, error) {
+func (p *Protocol) Execute(client StatefulReadWriter, params ...string) ([]byte, error) {
 	var (
 		err  error
 		resp []byte
@@ -170,4 +171,32 @@ func (p *Protocol) REQ(client StatefulReadWriter, params []string) ([]byte, erro
 	client.SetState(ClientWaitGet)
 
 	return nil, nil
+}
+
+func (p *Protocol) PUB(client StatefulReadWriter, params []string) ([]byte, error) {
+	var buf bytes.Buffer
+	var err error
+	if client.GetState() != -1 {
+		return nil, ClientErrInvalid
+	}
+	if len(params) < 3 {
+		return nil, ClientErrInvalid
+	}
+
+	topicName := params[1]
+	body := []byte(params[2])
+	//拿到消息的uuid
+	_, err = buf.Write(<-utils.UuidChan)
+	if err != nil {
+		return nil, err
+	}
+	//需要发送的消息放入缓冲区中
+	_, err = buf.Write(body)
+	if err != nil {
+		return nil, err
+	}
+
+	topic := message.GetTopic(topicName)
+	topic.PutMsg(message.NewMessage(buf.Bytes()))
+	return []byte("ok"), nil
 }
