@@ -13,7 +13,7 @@ type cache struct {
 }
 
 // 外层封装了Add方法
-func (c cache) add(key string, value ByteView) error {
+func (c *cache) add(key string, value ByteView) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -25,17 +25,17 @@ func (c cache) add(key string, value ByteView) error {
 }
 
 // 外层封装了Get方法
-func (c cache) get(key string) (value ByteView, ok bool) {
+func (c *cache) get(key string) (value ByteView, ok bool) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	if c.lru == nil {
-		return ByteView{}, false
+		return
 	}
 
 	if v, ok := c.lru.Get(key); ok {
 		return v.(ByteView), ok
 	}
 
-	return ByteView{}, false
+	return
 }
