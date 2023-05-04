@@ -16,6 +16,8 @@ type Group struct {
 	name      string
 	getter    Getter
 	mainCache cache
+	peers     PeerPicker
+	//loader *singleflight.Group	//确保key对应的请求只被调用一次
 }
 
 // 函数类型GetterFunc
@@ -69,13 +71,23 @@ func (g *Group) Get(key string) (ByteView, error) {
 		log.Println("[GeeCache] hit")
 		return v, nil
 	}
-	fmt.Println(ok)
 	//缓存不存在，则调用 load 方法
 	//fmt.Println(key, " not find in cache")
 	return g.load(key)
 }
 
 func (g *Group) load(key string) (ByteView, error) {
+	if g.peers != nil {
+		//使用PickPeer方法选择节点，若非本机节点，则从远程获取
+		if peer, ok := g.peers.PickPeer(key); ok {
+			value, err := g.getFromPeer(peer, key)
+			if err == nil {
+				return value, nil
+			}
+			log.Println("[GeeCache] Failed to get from peer", err)
+		}
+	}
+	//若是本机节点或者失败，回退至getLocally
 	return g.getLocally(key)
 }
 
@@ -87,22 +99,41 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 	}
 
 	value := ByteView{b: cloneBytes(bytes)}
-	fmt.Println(bytes, value)
+	//fmt.Println(bytes, value)
 	//将源数据添加到缓存 mainCache
 	err = g.populateCache(key, value)
 	if err != nil {
 		fmt.Println("populate failed")
 	}
-	fmt.Println(err)
+	//fmt.Println(err)
 	return value, nil
 }
 
 // 填充到mainCache中去
 func (g *Group) populateCache(key string, value ByteView) error {
 	err := g.mainCache.add(key, value)
+	//fmt.Println("jianchashifou zhendde")
+	//v, err1 := g.Get(key)
 	if err != nil {
 		fmt.Println("add failed")
 		return errors.New("add failed")
 	}
 	return nil
+}
+
+// 将实现了 PeerPicker 接口的 HTTPPool 注入到 Group 中
+func (g *Group) RegisterPeers(peers PeerPicker) {
+	if g.peers != nil {
+		panic("RegisterPeerPicker called more than once")
+	}
+	g.peers = peers
+}
+
+// 使用实现了 PeerGetter 接口的 httpGetter 从访问远程节点，获取缓存值
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	bytes, err := peer.Get(g.name, key)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: bytes}, nil
 }
