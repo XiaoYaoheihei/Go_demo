@@ -19,14 +19,16 @@ type Codec interface {
 // 抽象出Codec的构造函数
 type NewCodecFunc func(writer io.ReadWriter) Codec
 
+type Type string
+
 const (
 	GobType string = "application/gob"
 )
 
 // map用来存储具体的对应关系
-var NewCodecMap map[string]NewCodecFunc
+var NewCodecMap map[Type]NewCodecFunc
 
 func init() {
-	NewCodecMap = make(map[string]NewCodecFunc)
+	NewCodecMap = make(map[Type]NewCodecFunc)
 	NewCodecMap[GobType] = NewGobCodec
 }
