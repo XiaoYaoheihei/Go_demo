@@ -39,7 +39,7 @@ func (g *GobCodec) ReadBody(body interface{}) error {
 	return g.dec.Decode(body)
 }
 
-func (g *GobCodec) Writer(h *Header, body interface{}) (err error) {
+func (g *GobCodec) Write(h *Header, body interface{}) (err error) {
 	defer func() {
 		//清空缓冲区
 		_ = g.buf.Flush()
