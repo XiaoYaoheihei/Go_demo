@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// 最简单的客户端
 func main() {
 	addr := make(chan string)
 	//开启服务端程序
