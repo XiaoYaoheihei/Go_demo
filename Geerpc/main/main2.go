@@ -13,13 +13,15 @@ import (
 func main() {
 	log.SetFlags(0)
 	addr := make(chan string)
+	//协程开启服务端程序
 	go startServer2(addr)
 
+	//开启客户端进行demo
 	client, _ := geerpc.Dial("tcp", <-addr)
 	defer func() { _ = client.Close() }()
 
 	time.Sleep(time.Second)
-	// 发送请求
+	// 发送请求并等待响应
 	var wg sync.WaitGroup
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
