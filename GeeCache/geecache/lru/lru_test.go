@@ -20,6 +20,7 @@ func TestGet(t *testing.T) {
 	if !ok || string(v.(String)) != "1234" {
 		t.Fatalf("cache hit key1=1234 failed")
 	}
+	fmt.Println(ok)
 	if _, ok := lru.Get("key2"); ok {
 		t.Fatalf("cache miss key2 failed")
 	}
@@ -67,6 +68,8 @@ func TestOnEvicted(t *testing.T) {
 func TestAdd(t *testing.T) {
 	lru := New(int64(0), nil)
 	lru.Add("key", String("1"))
+	_, ok := lru.Get("key")
+	fmt.Println(ok)
 	lru.Add("key", String("111"))
 
 	if lru.useBytes != int64(len("key")+len("111")) {
