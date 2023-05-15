@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// Hash函数，通过key计算值的存储位值
+// Hash函数，通过key（参数是data）计算值的存储位值
 type Hash func(data []byte) uint32
 
 type Map struct {

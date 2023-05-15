@@ -1,5 +1,5 @@
 // 抽象了一个"只读"数据结构 ByteView 用来表示缓存值
-//是 GeeCache 主要的数据结构之一。
+// 是 GeeCache 主要的数据结构之一。
 
 package geecache
 
@@ -13,12 +13,12 @@ func (tmp ByteView) Len() int {
 	return len(tmp.b)
 }
 
-//因为b是只读的，所以我们使用此方法返回一个拷贝值，防止缓存值被修改
+// 因为b是只读的，所以我们使用此方法返回一个拷贝值，防止缓存值被修改
 func (tmp ByteView) ByteSlice() []byte {
 	return cloneBytes(tmp.b)
 }
 
-//返回一个string类型值
+// 返回一个string类型值
 func (tmp ByteView) String() string {
 	return string(tmp.b)
 }

@@ -20,6 +20,10 @@ func TestGetter(t *testing.T) {
 	if !reflect.DeepEqual(v, expect) {
 		t.Errorf("callback failed")
 	}
+
+	//var n GetterFunc = GetterFunc(func(key string) ([]byte, error) {
+	//	return []byte(key), nil
+	//})
 }
 
 // 用一个 map 模拟耗时的数据库。
@@ -42,6 +46,7 @@ func TestGet(t *testing.T) {
 					loadCounts[key] = 0
 				} //次数++
 				loadCounts[key] += 1
+				//fmt.Println(v)
 				return []byte(v), nil
 			}
 			return nil, fmt.Errorf("%s not exist", key)
@@ -54,7 +59,7 @@ func TestGet(t *testing.T) {
 		} // load from callback function
 
 		if _, err := gee.Get(k); err != nil || loadCounts[k] > 1 {
-			t.Fatal(err, loadCounts[k])
+			//t.Fatal(err, loadCounts[k])
 			t.Fatalf("cache %s miss", k)
 		} // cache hit
 	}
@@ -63,4 +68,5 @@ func TestGet(t *testing.T) {
 	if err == nil {
 		t.Fatalf("the value of unknow should be empty, but %s got", view)
 	}
+
 }
