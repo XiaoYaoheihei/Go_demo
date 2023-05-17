@@ -1,6 +1,7 @@
 package geerpc
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 )
 
 type Call struct {
@@ -39,6 +41,14 @@ type Client struct {
 	shutdown bool
 }
 
+// 客户端回应
+type clientResults struct {
+	client *Client
+	err    error
+}
+
+type newClientFunc func(conn net.Conn, opt *Option) (client *Client, err error)
+
 var ErrShutdown = errors.New("connection is shut down")
 
 func parse(opts ...*Option) (*Option, error) {
@@ -57,14 +67,15 @@ func parse(opts ...*Option) (*Option, error) {
 	return opt, nil
 }
 
-// 方便用户传入服务端地址，创建Client实例
-func Dial(network, address string, opts ...*Option) (client *Client, err error) {
+// 为Dial增加一层超时处理
+func dialTimeout(f newClientFunc, network, address string, opts ...*Option) (client *Client, err error) {
 	//将options解析
 	opt, err := parse(opts...)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.Dial(network, address)
+	//如果连接创建超时，将返回错误
+	conn, err := net.DialTimeout(network, address, opt.ConnectTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +85,24 @@ func Dial(network, address string, opts ...*Option) (client *Client, err error) 
 			_ = conn.Close()
 		}
 	}()
-	return NewClient(conn, opt)
+	ch := make(chan clientResults)
+	go func() {
+		//使用子协程执行NewClient，执行完之后发送结果到ch中
+		client, err := f(conn, opt)
+		ch <- clientResults{client: client, err: err}
+	}()
+	select {
+	//如果他首先接收到消息，就说明执行NewClient执行超时，返回错误
+	case <-time.After(opt.ConnectTimeout):
+		return nil, fmt.Errorf("rpc client: connect timeout: expect within %s", opt.ConnectTimeout)
+	case results := <-ch:
+		return results.client, results.err
+	}
+}
+
+// 方便用户传入服务端地址，创建Client实例
+func Dial(network, address string, opts ...*Option) (client *Client, err error) {
+	return dialTimeout(NewClient, network, address, opts...)
 }
 
 // 创建client实例
@@ -225,9 +253,17 @@ func (c *Client) send(call *Call) {
 }
 
 // 对Go的封装，阻塞call.Done,等待响应返回，是一个同步接口
-func (c *Client) Call(seviceMethod string, args, reply interface{}) error {
-	call := <-c.Go(seviceMethod, args, reply, make(chan *Call, 1)).Done
-	return call.Error
+func (c *Client) Call(ctx context.Context, seviceMethod string, args, reply interface{}) error {
+	//调用命名函数，等待完成
+	call := c.Go(seviceMethod, args, reply, make(chan *Call, 1))
+	select {
+	case <-ctx.Done():
+		c.removeCall(call.Seq)
+		return errors.New("rpc client: call failed: " + ctx.Err().Error())
+	case call := <-call.Done:
+		return call.Error
+	}
+
 }
 
 // 对外提供了异步调用的接口

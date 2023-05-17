@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const MagicNumber = 0x3bef5c
@@ -21,12 +22,16 @@ const MagicNumber = 0x3bef5c
 type Option struct {
 	MagicNumber int
 	CodecType   codec.Type
+	//超时的相关字段
+	ConnectTimeout time.Duration //默认值是10s
+	HandleTimeout  time.Duration //默认值是0
 }
 
 // 默认方式
 var DefaultOption = &Option{
-	MagicNumber: MagicNumber,
-	CodecType:   codec.Type(codec.GobType),
+	MagicNumber:    MagicNumber,
+	CodecType:      codec.Type(codec.GobType),
+	ConnectTimeout: time.Second * 10,
 }
 
 // 包含一个方法的完整信息
