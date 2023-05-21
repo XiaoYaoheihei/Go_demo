@@ -107,12 +107,12 @@ func (s *Server) ServeConn(conn io.ReadWriteCloser) {
 		return
 	}
 	//检查完毕之后进行自己的处理逻辑
-	s.serveCodec(f(conn))
+	s.serveCodec(f(conn), &op)
 }
 
 var invalidRequest = struct{}{}
 
-func (s *Server) serveCodec(cc codec.Codec) {
+func (s *Server) serveCodec(cc codec.Codec, opt *Option) {
 	sending := new(sync.Mutex)
 	wg := new(sync.WaitGroup)
 	//无限制地等待请求的到来，直到发生错误
@@ -129,7 +129,7 @@ func (s *Server) serveCodec(cc codec.Codec) {
 		}
 		wg.Add(1)
 		//协程处理请求
-		go s.handleRequest(cc, req, sending, wg)
+		go s.handleRequest(cc, req, sending, wg, opt.HandleTimeout)
 	}
 	wg.Wait()
 	_ = cc.Close()
@@ -182,17 +182,41 @@ func (s *Server) readRequestHeader(cc codec.Codec) (*codec.Header, error) {
 	return &h, nil
 }
 
-func (s *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex, wg *sync.WaitGroup) {
+func (s *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex, wg *sync.WaitGroup, timeout time.Duration) {
 	defer wg.Done()
-	//完成方法调用
-	err := req.svc.call(req.mtype, req.argv, req.replyv)
-	if err != nil {
-		req.h.Error = err.Error()
-		s.sendResponse(cc, req.h, invalidRequest, sending)
+	//确保 sendResponse 仅调用一次，
+	//因此将整个过程拆分为 called 和 sent 两个阶段
+	//called 信道接收到消息，代表处理没有超时，继续执行 sendResponse
+	called := make(chan struct{})
+	sent := make(chan struct{})
+	go func() {
+		//完成方法调用
+		err := req.svc.call(req.mtype, req.argv, req.replyv)
+		called <- struct{}{}
+		if err != nil {
+			req.h.Error = err.Error()
+			s.sendResponse(cc, req.h, invalidRequest, sending)
+			sent <- struct{}{}
+			return
+		}
+		//将响应的replyv传递给sendResponse完成序列化
+		s.sendResponse(cc, req.h, req.replyv.Interface(), sending)
+		sent <- struct{}{}
+	}()
+
+	if timeout == 0 {
+		<-called
+		<-sent
 		return
 	}
-	//将响应的replyv传递给sendResponse完成序列化
-	s.sendResponse(cc, req.h, req.replyv.Interface(), sending)
+	select {
+	//先于 called 接收到消息，说明处理已经超时called 和 sent 都将被阻塞
+	case <-time.After(timeout):
+		req.h.Error = fmt.Sprintf("rpc server: request handle timeout: expect within %s", timeout)
+		s.sendResponse(cc, req.h, invalidRequest, sending)
+	case <-called:
+		<-sent
+	}
 }
 
 func (s *Server) sendResponse(cc codec.Codec, h *codec.Header, body interface{}, sending *sync.Mutex) {
