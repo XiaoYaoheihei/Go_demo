@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 	pb "helloworld/helloworld"
 	"log"
 	"net"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 type service_method struct {
@@ -37,7 +38,6 @@ func Newserver() *server {
 }
 func main() {
 	flag.Parse()
-
 	lis, err := net.Listen("tcp", "127.0.0.1:9009")
 	if err != nil {
 		log.Println(err)
